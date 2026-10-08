@@ -4,6 +4,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../../core/platform/platform_info.dart';
 import '../../player/audio_player_service.dart';
+import '../../player/transport_row.dart';
 import '../domain/eq_engine.dart';
 import 'eq_controller.dart';
 import 'widgets/band_slider.dart';
@@ -195,50 +196,21 @@ class _PlayerBar extends ConsumerWidget {
             ),
           ),
         ),
-        data: (s) => Row(
-          children: [
-            StreamBuilder<PlayerState>(
-              stream: s.playerStateStream,
-              initialData: s.player.playerState,
-              builder: (context, snap) {
-                final playing = snap.data?.playing ?? false;
-                final processing =
-                    snap.data?.processingState ?? ProcessingState.idle;
-                if (processing == ProcessingState.loading ||
-                    processing == ProcessingState.buffering) {
-                  return const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  );
-                }
-                return IconButton(
-                  tooltip: playing ? 'Pause demo' : 'Play demo loop',
-                  onPressed: s.toggle,
-                  icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                );
-              },
-            ),
-            const Expanded(
-              child: Text('demo.wav — audition loop', overflow: TextOverflow.ellipsis),
-            ),
-            Tooltip(
-              message: 'Audio session id for the native engine (Android)',
-              child: Text(
-                'session ${s.androidAudioSessionId ?? '—'}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
+        data: (s) => StreamBuilder<PlayerState>(
+          stream: s.playerStateStream,
+          initialData: s.player.playerState,
+          builder: (context, snap) {
+            final playing = snap.data?.playing ?? false;
+            final processing =
+                snap.data?.processingState ?? ProcessingState.idle;
+            return TransportRow(
+              playing: playing,
+              busy: processing == ProcessingState.loading ||
+                  processing == ProcessingState.buffering,
+              sessionId: s.androidAudioSessionId,
+              onToggle: s.toggle,
+            );
+          },
         ),
       ),
     );

@@ -22,10 +22,11 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
 - [x] `[E5/G5]` FFT helper (`lib/features/dsp/spectrum.dart`, `package:fft`):
       `peakFrequency` + Hann-windowed `magnitudeSpectrum`; 3 tests —
       live-capture wiring still open (see P1)
-- [ ] `[E4/G1,G2]` Wire `AudioPlayerService` into the app (currently dead code,
-      zero references in `lib/`): Riverpod provider, transport controls in UI,
-      bundled sample audio asset, session-id display. Unblocks all audible
-      verification — do this before the engine tasks.
+- [x] `[E4/G1,G2]` Wired `AudioPlayerService` into the app: Riverpod provider,
+      `_PlayerBar` transport + session-id display, generated
+      `assets/samples/demo.wav` audition loop (`tool/make_demo_wav.py`),
+      Linux playback via `just_audio_media_kit` + `media_kit_libs_linux`;
+      `TransportRow` split out pure for tests
 - [ ] `[E2/G3]` Bundle ≥20 AutoEQ-derived headphone presets as app assets with
       attribution; show source in UI
 - [ ] `[E1/G1]` Android engine modeled on Equalizer314: MethodChannel
@@ -40,9 +41,13 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
 
 ## P1 — Make it trustworthy and observable
 
-- [ ] `[E3/G4]` Preamp gain (correctness: every boosted preset clips without
-      it): `preampDb` in `EqState` + engine support + UI slider + persistence;
-      APO export writes the real preamp instead of smearing it into bands
+- [x] `[E3/G4]` Preamp gain: `preampDb` in `EqState` + `EqEngine.setPreamp`
+      (−24…+12 dB) + UI slider + persistence; APO import routes preamp to
+      preamp (no band smear), export writes the real preamp; offline render
+      applies it; 5 controller tests + preamp render test
+- [x] `[E5/G5]` Static EQ response curve widget (`EqCurveWidget`: log-freq
+      CustomPainter from tested `EqChain.magnitudeAt`, band markers, preamp
+      included) integrated in `EqPage`
 - [ ] `[E3/G4]` Truly parametric editing: per-band Q (+ filter type PK/LS/HS)
       in UI with persistence; `Biquad.notch` factory to close the pyramid's
       "peaking/shelf/notch" promise; unit tests
@@ -53,13 +58,11 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
       replaces the `ChoiceChip` row once the bundle exceeds ~8 items
 - [ ] `[E3/G4]` Extend render demo: sample WAV asset + "render + save" flow
       reusing `renderEqOnWav` (core already done); golden-file test
-- [ ] `[E5/G5]` Static EQ response curve widget (use tested
-      `EqChain.magnitudeAt` — no permissions, no native code)
 - [ ] `[E5/G5]` Live spectrum: Android `Visualizer` API capture (Equalizer314
       pattern); Linux FFT path reusing tested `Spectrum`; both behind the
       same widget
-- [ ] `[E4/G1,G2]` A/B audition flow: bypass toggle + blind-toggle + session-id
-      in bug reports (builds on the player-wiring task above)
+- [ ] `[E4/G1,G2]` A/B audition flow: bypass toggle + blind-toggle (player +
+      demo loop already wired; add bypass + session-id in bug reports)
 - [ ] `[E7/*]` Engine conformance tests: same gain/enable/clamp suite runs
       against mock + Android + any future backend
 

@@ -78,6 +78,25 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.textContaining('session'), findsOneWidget);
   });
+
+  testWidgets('TransportRow shows notice when disabled', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: TransportRow(
+            playing: false,
+            busy: false,
+            sessionId: null,
+            onToggle: _noop,
+            enabled: false,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.play_arrow), findsNothing);
+    expect(find.textContaining('Demo audio unavailable'), findsOneWidget);
+  });
 }
 
 void _noop() {}

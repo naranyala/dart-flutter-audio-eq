@@ -25,14 +25,22 @@ class AudioPlayerService {
 
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
 
+  /// True once the bundled demo asset loaded. False when the playback
+  /// backend is missing (e.g. no system libmpv on Linux) — the UI then
+  /// shows a notice instead of a dead play button.
+  bool demoLoaded = false;
+
   Future<void> init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     debugPrint('[AudioPlayerService] session configured');
   }
 
-  /// Load the bundled demo loop (idempotent).
-  Future<void> loadDemo() => _player.setAsset(demoAsset, preload: true);
+  /// Load the bundled demo loop (idempotent). Sets [demoLoaded].
+  Future<void> loadDemo() async {
+    await _player.setAsset(demoAsset, preload: true);
+    demoLoaded = true;
+  }
 
   Future<void> toggle() =>
       _player.playing ? _player.pause() : _player.play();

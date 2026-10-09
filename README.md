@@ -36,6 +36,19 @@ Linux native deps (AlmaLinux / Fedora):
 sudo dnf install clang cmake ninja-build pkg-config gtk3-devel
 ```
 
+Demo-loop playback on Linux additionally needs system **libmpv**
+(`media_kit` does not bundle it):
+
+```bash
+# Debian/Ubuntu:
+sudo apt install libmpv2
+# AlmaLinux/Fedora (RPM Fusion):
+sudo dnf install mpv-libs
+```
+
+Without libmpv the app still runs fully — the player bar shows a notice
+instead of a dead play button, and offline WAV rendering works regardless.
+
 Android setup (cmdline-tools + licenses are required — see `flutter doctor`):
 
 ```bash

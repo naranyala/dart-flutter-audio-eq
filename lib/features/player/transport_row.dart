@@ -11,6 +11,7 @@ class TransportRow extends StatelessWidget {
     required this.busy,
     required this.sessionId,
     required this.onToggle,
+    this.enabled = true,
   });
 
   final bool playing;
@@ -18,8 +19,23 @@ class TransportRow extends StatelessWidget {
   final int? sessionId;
   final VoidCallback onToggle;
 
+  /// False when no audio can play (missing backend): shows a notice
+  /// instead of a dead play button.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
+    if (!enabled) {
+      return SizedBox(
+        height: 48,
+        child: Center(
+          child: Text(
+            'Demo audio unavailable (missing playback backend — see README)',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ),
+      );
+    }
     return Row(
       children: [
         if (busy)

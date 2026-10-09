@@ -172,6 +172,8 @@ class _PlatformBanner extends StatelessWidget {
 ///
 /// The session id is what the future Android native engine attaches its
 /// `Equalizer` to — surfacing it here makes bug reports actionable.
+void _noopToggle() {}
+
 class _PlayerBar extends ConsumerWidget {
   const _PlayerBar();
 
@@ -196,22 +198,33 @@ class _PlayerBar extends ConsumerWidget {
             ),
           ),
         ),
-        data: (s) => StreamBuilder<PlayerState>(
-          stream: s.playerStateStream,
-          initialData: s.player.playerState,
-          builder: (context, snap) {
-            final playing = snap.data?.playing ?? false;
-            final processing =
-                snap.data?.processingState ?? ProcessingState.idle;
-            return TransportRow(
-              playing: playing,
-              busy: processing == ProcessingState.loading ||
-                  processing == ProcessingState.buffering,
-              sessionId: s.androidAudioSessionId,
-              onToggle: s.toggle,
+        data: (s) {
+          if (!s.demoLoaded) {
+            return const TransportRow(
+              playing: false,
+              busy: false,
+              sessionId: null,
+              onToggle: _noopToggle,
+              enabled: false,
             );
-          },
-        ),
+          }
+          return StreamBuilder<PlayerState>(
+            stream: s.playerStateStream,
+            initialData: s.player.playerState,
+            builder: (context, snap) {
+              final playing = snap.data?.playing ?? false;
+              final processing =
+                  snap.data?.processingState ?? ProcessingState.idle;
+              return TransportRow(
+                playing: playing,
+                busy: processing == ProcessingState.loading ||
+                    processing == ProcessingState.buffering,
+                sessionId: s.androidAudioSessionId,
+                onToggle: s.toggle,
+              );
+            },
+          );
+        },
       ),
     );
   }

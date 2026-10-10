@@ -97,6 +97,81 @@ void main() {
     expect(find.byIcon(Icons.play_arrow), findsNothing);
     expect(find.textContaining('Demo audio unavailable'), findsOneWidget);
   });
+
+  testWidgets('TransportRow seek bar seeks and shows times', (tester) async {
+    Duration? sought;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransportRow(
+            playing: true,
+            busy: false,
+            sessionId: null,
+            onToggle: _noop,
+            trackLabel: 'song.mp3 · MP3 · EQ',
+            position: const Duration(seconds: 65),
+            duration: const Duration(seconds: 125),
+            onSeek: (d) => sought = d,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('song.mp3 · MP3 · EQ'), findsOneWidget);
+    expect(find.text('1:05'), findsOneWidget);
+    expect(find.text('2:05'), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
+    await tester.drag(
+      find.byType(Slider),
+      const Offset(40, 0),
+    );
+    await tester.pump();
+    expect(sought, isNotNull);
+  });
+
+  testWidgets('TransportRow loop toggle reflects state', (tester) async {    var toggled = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransportRow(
+            playing: false,
+            busy: false,
+            sessionId: null,
+            onToggle: _noop,
+            looping: true,
+            onToggleLoop: () => toggled = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.repeat_one), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.repeat_one));
+    expect(toggled, isTrue);
+  });
+
+  testWidgets('SeekBar renders disabled without a source (no layout jump)',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: TransportRow(
+            playing: false,
+            busy: false,
+            sessionId: null,
+            onToggle: _noop,
+          ),
+        ),
+      ),
+    );
+
+    // Seek row always present; slider disabled until duration arrives.
+    expect(find.byType(Slider), findsOneWidget);
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.onChanged, isNull);
+    expect(find.text('0:00'), findsOneWidget); // position
+    expect(find.text('0:01'), findsOneWidget); // placeholder duration
+  });
 }
 
 void _noop() {}

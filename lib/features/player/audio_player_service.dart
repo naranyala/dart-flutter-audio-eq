@@ -25,6 +25,15 @@ class AudioPlayerService {
 
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
 
+  Stream<Duration> get positionStream => _player.positionStream;
+
+  Stream<Duration?> get durationStream => _player.durationStream;
+
+  Stream<LoopMode> get loopStream => _player.loopModeStream;
+
+  Future<void> setLoop(bool loop) =>
+      _player.setLoopMode(loop ? LoopMode.one : LoopMode.off);
+
   bool get playing => _player.playing;
 
   Future<Duration?> get position async {
@@ -72,6 +81,11 @@ class AudioPlayerService {
 
   Future<void> toggle() =>
       _player.playing ? _player.pause() : _player.play();
+
+  Future<void> toggleLoop() async {
+    final mode = _player.loopMode;
+    await setLoop(mode != LoopMode.one);
+  }
 
   Future<void> dispose() => _player.dispose();
 }

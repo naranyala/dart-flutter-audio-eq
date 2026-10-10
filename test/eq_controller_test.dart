@@ -8,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wav/wav.dart';
 
+import 'package:audio_eq/features/dsp/audio_decode.dart';
 import 'package:audio_eq/features/eq/data/apo_preset.dart';
+import 'package:audio_eq/features/eq/domain/eq_preset.dart';
 import 'package:audio_eq/features/eq/data/preset_file_service.dart';
 import 'package:audio_eq/features/eq/data/preset_repository.dart';
 import 'package:audio_eq/features/eq/domain/eq_engine.dart';
@@ -74,6 +76,9 @@ class FakeAudio extends AudioPlayerService {
   var isPlaying = false;
   var playCalls = 0;
 
+  /// Artificial latency to force overlapping refreshes in race tests.
+  Duration setFileDelay = Duration.zero;
+
   @override
   bool get playing => isPlaying;
 
@@ -82,6 +87,9 @@ class FakeAudio extends AudioPlayerService {
 
   @override
   Future<void> setFile(String path, {Duration? initialPosition}) async {
+    if (setFileDelay > Duration.zero) {
+      await Future<void>.delayed(setFileDelay);
+    }
     setFiles.add(path);
     demoLoaded = true;
   }
@@ -108,6 +116,9 @@ Future<ProviderContainer> makeContainer({
   FakeAudio? audio,
   Future<Directory> Function()? tempDir,
   Future<ByteData> Function()? demoBytes,
+  Future<({String name, String path})?> Function()? pickAudio,
+  Future<DecodedAudio> Function(String, Directory)? decodeFile,
+  Duration? debounce,
 }) async {
   SharedPreferences.setMockInitialValues(prefs ?? {});
   final repo = PresetRepository(await SharedPreferences.getInstance());
@@ -118,7 +129,16 @@ Future<ProviderContainer> makeContainer({
       presetRepositoryProvider.overrideWith((_) => repo),
       if (audio != null) audioPlayerServiceProvider.overrideWith((_) => audio),
       eqControllerProvider.overrideWith((ref) {
-        controller = EqController(engine, ref, files, tempDir, demoBytes);
+        controller = EqController(
+          engine,
+          ref,
+          files,
+          tempDir,
+          demoBytes,
+          pickAudio,
+          decodeFile,
+          debounce,
+        );
         return controller;
       }),
     ],
@@ -270,9 +290,13 @@ void main() {
       audio: audio,
       tempDir: () async => Directory.systemTemp,
       demoBytes: testDemoBytes,
+      debounce: Duration.zero,
     );
     final controller = container.read(eqControllerProvider.notifier);
-    await controller.setGain(2, 6);
+    // applyPreset refreshes immediately (no debounce timer involved).
+    await controller.applyPreset(
+      const EqPreset(name: 'B', gainsDb: [0, 0, 6, 0, 0]),
+    );
 
     // Nothing rendered before first play.
     expect(audio.setFiles, isEmpty);
@@ -292,7 +316,7 @@ void main() {
     expect(boosted, isNot(equals(bypass)));
   });
 
-  test('slider moves while playing hot-swap the source and resume', () async {
+  test('preset changes while playing hot-swap the source and resume', () async {
     final audio = FakeAudio();
     final container = await makeContainer(
       engine: FakeEngine(),
@@ -300,14 +324,196 @@ void main() {
       audio: audio,
       tempDir: () async => Directory.systemTemp,
       demoBytes: testDemoBytes,
+      debounce: Duration.zero,
     );
     final controller = container.read(eqControllerProvider.notifier);
     await controller.toggleAudition();
     expect(audio.isPlaying, isTrue);
 
-    await controller.setGain(0, 6);
+    await controller.applyPreset(
+      const EqPreset(name: 'B', gainsDb: [6, 0, 0, 0, 0]),
+    );
     expect(audio.setFiles.length, 2);
     expect(audio.isPlaying, isTrue);
     expect(audio.playCalls, 1); // resumed after the swap
   });
+
+  test('slider drags coalesce into one render (debounce)', () async {
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.toggleAudition();
+    expect(audio.setFiles.length, 1);
+
+    // Rapid drag: only the last state renders once.
+    await controller.setGain(0, 1);
+    await controller.setGain(0, 2);
+    await controller.setGain(0, 3);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(audio.setFiles.length, 2);
+    expect(container.read(eqControllerProvider).bands[0].gainDb, 3);
+  });
+
+  test('openUserFile auditions a picked WAV through the EQ', () async {
+    final wavPath = await _writeTempWav('user-song.wav');
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+      pickAudio: () async => (name: 'user-song.wav', path: wavPath),
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+
+    final name = await controller.openUserFile();
+    expect(name, 'user-song.wav');
+    expect(container.read(eqControllerProvider).auditionLabel,
+        'user-song.wav · WAV · EQ');
+    expect(controller.auditionEqCapable, isTrue);
+    expect(audio.setFiles.length, 1);
+  });
+
+  test('undecodable file plays direct with a notice', () async {
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+      pickAudio: () async => (name: 'weird.xyz', path: '/tmp/weird.xyz'),
+      decodeFile: (p, d) async => throw const FormatException('nope'),
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+
+    final name = await controller.openUserFile();
+    expect(name, 'weird.xyz');
+    expect(controller.auditionEqCapable, isFalse);
+    expect(container.read(eqControllerProvider).auditionLabel,
+        contains('no EQ'));
+    // Direct path handed to the player untouched.
+    expect(audio.setFiles.single, '/tmp/weird.xyz');
+  });
+
+  test('cancelled file pick is a no-op', () async {    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+      pickAudio: () async => null,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+
+    expect(await controller.openUserFile(), isNull);
+    expect(audio.setFiles, isEmpty);
+    expect(container.read(eqControllerProvider).trackName, 'demo.wav');
+  });
+
+  test('overlapping refreshes serialize: 3 concurrent toggles, 2 loads',
+      () async {
+    final audio = FakeAudio()
+      ..setFileDelay = const Duration(milliseconds: 50);
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+
+    // Three overlapping prepares: first runs, other two coalesce into one
+    // trailing run instead of interleaving three render→write→load cycles.
+    final results = await Future.wait([
+      controller.toggleAudition(),
+      controller.toggleAudition(),
+      controller.toggleAudition(),
+    ]);
+    expect(results, [isNull, isNull, isNull]);
+    expect(audio.setFiles.length, 2);
+  });
+
+  test('direct-mode toggle skips the pointless reload', () async {
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+      pickAudio: () async => (name: 'weird.xyz', path: '/tmp/weird.xyz'),
+      decodeFile: (p, d) async => throw const FormatException('nope'),
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.openUserFile();
+    expect(audio.setFiles.length, 1);
+
+    // Same file, same bytes: reloading would only cause a dropout.
+    await controller.setEnabled(false);
+    expect(audio.setFiles.length, 1);
+  });
+
+  test('previous converted file is deleted on next open', () async {
+    final first = await _writeTempWav('conv-one.wav');
+    final second = await _writeTempWav('conv-two.wav');
+    var pickPath = first;
+    Future<DecodedAudio> fakeDecode(String path, Directory dir) async {
+      const rate = 44100;
+      final ch = Float64List(100);
+      return DecodedAudio(
+        wav: Wav([ch], rate),
+        formatLabel: 'MP3',
+        wasConverted: true,
+        decodedPath: path,
+      );
+    }
+
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+      debounce: Duration.zero,
+      pickAudio: () async =>
+          (name: pickPath.split('/').last, path: pickPath),
+      decodeFile: fakeDecode,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.openUserFile();
+    expect(File(first).existsSync(), isTrue);
+    expect(controller.auditionEqCapable, isTrue);
+
+    // Swap happens before deletion, so the player never loses its file.
+    pickPath = second;
+    await controller.openUserFile();
+    expect(File(first).existsSync(), isFalse);
+    expect(File(second).existsSync(), isTrue);
+    expect(audio.setFiles.length, 2);
+  });
+}
+
+/// Write the fake demo bytes to a real temp `.wav` file for picker tests.
+Future<String> _writeTempWav(String name) async {
+  final bytes = (await testDemoBytes()).buffer.asUint8List();
+  final path = '${Directory.systemTemp.path}/$name';
+  await File(path).writeAsBytes(bytes, flush: true);
+  return path;
 }

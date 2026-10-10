@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:rxdart/rxdart.dart';
 
 import '../../../core/platform/platform_info.dart';
 import '../../player/audio_player_service.dart';
@@ -43,6 +44,21 @@ class EqPage extends ConsumerWidget {
               }
             },
             icon: const Icon(Icons.folder_open),
+          ),
+          IconButton(
+            tooltip: 'Open audio file',
+            onPressed: () async {
+              final name = await controller.openUserFile();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    name == null ? 'Open cancelled' : 'Auditioning "$name"',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.library_music),
           ),
           IconButton(
             tooltip: 'Share preset as APO (.txt)',
@@ -210,20 +226,37 @@ class _PlayerBar extends ConsumerWidget {
               enabled: false,
             );
           }
-          final toggle =
-              ref.read(eqControllerProvider.notifier).toggleAudition;
-          return StreamBuilder<PlayerState>(
-            stream: s.playerStateStream,
+          final eq = ref.watch(
+            eqControllerProvider.select((e) => e.auditionLabel),
+          );          final player = ref.read(eqControllerProvider.notifier);
+          return StreamBuilder<({bool busy, Duration? duration, bool looping, bool playing, Duration position})>(
+            stream: Rx.combineLatest4<PlayerState, Duration, Duration?, LoopMode, ({bool busy, Duration? duration, bool looping, bool playing, Duration position})>(
+              s.playerStateStream,
+              s.positionStream,
+              s.durationStream,
+              s.loopStream,
+              (st, pos, dur, loop) => (
+                playing: st.playing,
+                busy: st.processingState == ProcessingState.loading ||
+                    st.processingState == ProcessingState.buffering,
+                position: pos,
+                duration: dur,
+                looping: loop == LoopMode.one,
+              ),
+            ),
             builder: (context, snap) {
-              final playing = snap.data?.playing ?? false;
-              final processing =
-                  snap.data?.processingState ?? ProcessingState.idle;
+              final d = snap.data;
               return TransportRow(
-                playing: playing,
-                busy: processing == ProcessingState.loading ||
-                    processing == ProcessingState.buffering,
+                playing: d?.playing ?? false,
+                busy: d?.busy ?? false,
                 sessionId: s.androidAudioSessionId,
-                onToggle: toggle,
+                onToggle: player.toggleAudition,
+                trackLabel: eq,
+                position: d?.position,
+                duration: d?.duration,
+                onSeek: player.seekTo,
+                looping: d?.looping ?? false,
+                onToggleLoop: player.toggleLoop,
               );
             },
           );

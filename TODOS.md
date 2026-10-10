@@ -26,8 +26,9 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
       `_PlayerBar` transport + session-id display, generated
       `assets/samples/demo.wav` audition loop (`tool/make_demo_wav.py`),
       Linux playback via `just_audio_media_kit` + `media_kit_libs_linux`
-      (needs system libmpv — see README); `TransportRow` split out pure
-      for tests
+      (needs system libmpv — see README; rootless bootstrap verified:
+      `tool/setup-linux-audio.sh` + `tool/run-linux.sh`, no sudo);
+      `TransportRow` split out pure for tests
 - [x] `[E4/G1,G2]` Render-based audible audition (the toggle is real now):
       player source is a temp `audition.wav` rendered from current state
       (`renderAudition`: bypass serves the untouched demo); every EQ
@@ -35,6 +36,14 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
       play prepares lazily; 3 helper + 3 controller tests. Chosen over
       live byte-streaming because the Linux backend only supports
       URI/file sources (`StreamAudioSource` throws there).
+- [x] `[E4/G1,G2]` Audition glitch fixes: serialized refreshes (rapid preset
+      hops no longer interleave render→write→load cycles — overlap coalesces
+      to one trailing run); seek row always rendered (no layout jump on
+      reloads); trailing debounce cancelled by immediate refreshes (no
+      double dropout after import); converted temp files deleted on next
+      open; identical direct-play reloads skipped. 4 new tests. Remaining
+      inherent limitation: brief dropout per swap (single player reopening
+      the file — no crossfade possible without a second player).
 - [x] `[E7]` Toggle persistence: `eq_enabled` in `PresetRepository`,
       restored in `init`, covered by restart test
 - [ ] `[E2/G3]` Bundle ≥20 AutoEQ-derived headphone presets as app assets with
@@ -74,6 +83,29 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
       same widget
 - [ ] `[E4/G1,G2]` A/B audition extras: blind-toggle (enable switch already
       gives honest bypass); session-id in bug reports (already displayed)
+- [x] `[E4/G1,G2]` User-file audition: open any audio file (`file_picker`
+      `FileType.audio`) with track label (`name · FORMAT · EQ`); WAV parses
+      directly, MP3/FLAC/OGG/… decode via `package:audio_decoder` (MIT,
+      native APIs, GStreamer on Linux); undecodable files play direct with
+      an "original (no EQ)" notice; cancel is a no-op; 3 controller tests
+- [x] `[E4/G1,G2]` Complete transport: seek bar with elapsed/total time,
+      single-track loop toggle, session id (play/pause existed)
+- [x] `[E4/G1,G2]` Debounced re-render: slider/preamp drags coalesce to one
+      render (250 ms trailing, in-flight cancel); discrete gestures
+      (toggle/preset/import/file) render immediately; coalescing test
+- [~] `[E3/G4]` Multi-format render input (BLOCKED 2026-10-10): decision
+      recorded — `package:audio_decoder` (MIT, native APIs) selected, then
+      reverted because its Linux build needs GStreamer *dev* packages absent
+      from locked-down machines. Unblock = ONE install
+      (`gstreamer1-devel gstreamer1-plugins-base-devel`) or the
+      miniaudio-FFI spike; pure-Dart (`dart_flac` 0.0.x) and narrow FFI
+      (`audio_decode`: MP3/Vorbis only) rejected. Until then: WAV renders
+      with EQ, everything else plays direct with notice (shipped above).
+- [ ] `[E3/G4]` scipy golden vectors (`tool/golden_vectors.py`): generate
+      reference biquad responses, consume as unit-test vectors to catch
+      coefficient bugs sine-RMS tests might miss
+- [ ] `[E5/G5]` Linux capture spike: miniaudio-via-FFI go/no-go for monitor
+      streams feeding the live visualizer; time-boxed, decision record only
 - [ ] `[E7/*]` Engine conformance tests: same gain/enable/clamp suite runs
       against mock + Android + any future backend
 
@@ -87,6 +119,14 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
       Tier-2 banner disappears platform by platform
 - [ ] `[E7/*]` CI (GitHub Actions or equivalent): analyze + test + Linux build
       on push; Android build on tag; `flutter pub outdated` monthly
+- [ ] `[E6/G2]` Output routing (Linux): sink/device selection + volume —
+      player uses the default sink only today
+- [ ] `[E8/G7]` Desktop citizenship (Linux): MPRIS/media-keys support, "open
+      with audio_eq" file association + `.desktop` polish, tray /
+      minimize-to-tray behavior, playback notifications
+- [ ] `[E8/G7]` LICENSE file (GPL-3.0 suggested, consistent with Equalizer314
+      reference + "free, open" vision): decide BEFORE importing any
+      GPL-derived code or accepting contributions; unblocks release track
 - [ ] `[E7/G7]` Real-device matrix before any release claim: Android API levels
       × PipeWire versions actually tested, recorded in README
 - [ ] `[E8/G7]` Release track: app icon + splash + display name; Android signing
@@ -101,6 +141,9 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
 - Per-app profiles, loudness compensation, crossfeed — capture as G/E first
 - Background playback / foreground service — conditional on engine
   architecture (needed for own-player EQ, unnecessary for system-wide EQ)
+- Recording (capture + save WAV) — needs a goal first
+- Streaming radio / URL-preset UI — needs a goal first
+- Android quick-settings tile for bypass toggle — needs a goal first
 - First-run onboarding (preview-vs-native explainer) — needs a goal first
 - i18n — needs a goal first
 - Cloud sync / accounts — explicitly out of scope until vision changes

@@ -40,11 +40,29 @@ Demo-loop playback on Linux additionally needs system **libmpv**
 (`media_kit` does not bundle it):
 
 ```bash
-# Debian/Ubuntu:
-sudo apt install libmpv2
-# AlmaLinux/Fedora (RPM Fusion):
-sudo dnf install mpv-libs
+# Proper fix (needs sudo):
+sudo dnf install mpv-libs        # AlmaLinux/Fedora (RPM Fusion)
+sudo apt install libmpv2         # Debian/Ubuntu
+
+# Rootless workaround (no sudo) — downloads + extracts the RPMs to
+# ~/.local/share/audio_eq/libs, then launches with them:
+bash tool/setup-linux-audio.sh
+bash tool/run-linux.sh
 ```
+
+Decoding user files (MP3/FLAC/OGG/…) needs the `audio_decoder` plugin,
+which in turn needs GStreamer dev packages at *build* time:
+
+```bash
+# Debian/Ubuntu:
+sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+# AlmaLinux/Fedora:
+sudo dnf install gstreamer1-devel gstreamer1-plugins-base-devel
+```
+
+Without them the app still builds and runs — WAV renders with EQ, other
+formats play direct with notice (runtime GStreamer plugins are preinstalled
+on most desktop distros).
 
 Without libmpv the app still runs fully — the player bar shows a notice
 instead of a dead play button, and offline WAV rendering works regardless.
@@ -59,7 +77,9 @@ flutter emulators  # or plug in a device
 ## What's in the app
 
 - **5-band EQ** (60 / 230 / 910 / 3.6k / 14k Hz, ±12 dB) with enable bypass,
-  reset, and built-in presets (Flat, Bass Boost, Vocal, Treble).
+  reset, and 17 built-ins: Flat; tone fixes (Bass Boost/Cut, Treble Boost,
+  Warm, Loudness); voice (Vocal, Podcast); genres (Rock, Pop, Hip-Hop,
+  Electronic, Jazz, Classical, Metal); scenarios (Late Night, Gaming).
 - **Preamp** (−24…+12 dB) — headroom control that boosted presets (e.g. AutoEQ
   corrections) need to avoid clipping.
 - **Response curve** — the combined filter response drawn live from the same
@@ -71,6 +91,13 @@ flutter emulators  # or plug in a device
   source preserving position/playing. File-based (not live-streamed) because
   the Linux backend only supports URI/file sources — identical behavior on
   Android and Linux.
+- **Your own files** — open any audio file (music-note button): WAV runs
+  through the full EQ render path (MP3/FLAC/OGG decode is selected but
+  blocked on GStreamer dev packages — see `TODOS.md`; until then non-WAV
+  plays direct with an "original (no EQ)" notice). Track label shows
+  `name · FORMAT · EQ`.
+- **Transport** — play/pause, seek bar with elapsed/total time, single-track
+  loop, session id. Slider drags coalesce renders (250 ms debounce).
 - **Preset interchange** — import/export Equalizer APO `.txt`
   (`Preamp:` + `PK`/`LS`/`HS` filters) via the folder/share buttons.
   Compatible with Equalizer APO, Peace, AutoEQ exports, Resonance.

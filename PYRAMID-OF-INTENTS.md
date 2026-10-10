@@ -71,10 +71,12 @@ cloud sync / subscriptions.
   named user presets (CRUD) with persistence.
 - **E3 DSP core** — pure-Dart biquads (peaking/shelf/notch from the W3C EQ
   Cookbook), per-band Q + filter-type editing, preamp gain control, offline
-  render path, later FFI/C++ only if profiling demands it.
+  render path (WAV today, decoded formats next), scipy golden-vector
+  validation, later FFI/C++ only if profiling demands it.
 - **E4 Auditioning** — `just_audio` + `audio_session` transport wired into the
-  app (provider + UI + sample asset), expose Android session id for A/B
-  checks and bug reports.
+  app (provider + UI + sample asset), user-file/URL playback, complete
+  transport (seek/loop/time), debounced re-render, expose Android session id
+  for A/B checks and bug reports.
 - **E5 Visualization** — static EQ curve now (free, no permissions), live
   spectrum later (Android `Visualizer` API / Linux FFT).
 - **E6 Platform wiring** — MethodChannel `com.audioeq/eq`, manifest
@@ -83,9 +85,10 @@ cloud sync / subscriptions.
 - **E7 Quality gates** — `flutter analyze` clean, `flutter test` green, Linux
   debug build green, Android build on demand; CI when the repo goes remote;
   real-device matrix (Android API levels, PipeWire versions) before release.
-- **E8 Release & distribution** — icon/splash/name, Android signing + release
-  artifacts, Linux packaging (one format), store listing + privacy policy,
-  versioning scheme.
+- **E8 Release & distribution** — LICENSE file first, then icon/splash/name,
+  Android signing + release artifacts, Linux packaging (one format) +
+  desktop citizenship (MPRIS, file association, tray), store listing +
+  privacy policy, versioning scheme.
 
 ## L4 — Tasks
 

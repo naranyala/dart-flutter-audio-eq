@@ -25,10 +25,24 @@ class AudioPlayerService {
 
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
 
-  /// True once the bundled demo asset loaded. False when the playback
-  /// backend is missing (e.g. no system libmpv on Linux) — the UI then
-  /// shows a notice instead of a dead play button.
+  bool get playing => _player.playing;
+
+  Future<Duration?> get position async {
+    try {
+      return _player.position;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// True once an audition source is loaded. False initially (source is
+  /// prepared lazily on first play) and when the backend is missing — the
+  /// UI then shows a notice instead of a dead play button.
   bool demoLoaded = false;
+
+  /// Backend failure captured at init (e.g. no system libmpv on Linux).
+  /// When set, auditioning is unavailable; everything else still works.
+  String? audioError;
 
   Future<void> init() async {
     final session = await AudioSession.instance;
@@ -36,11 +50,25 @@ class AudioPlayerService {
     debugPrint('[AudioPlayerService] session configured');
   }
 
-  /// Load the bundled demo loop (idempotent). Sets [demoLoaded].
-  Future<void> loadDemo() async {
-    await _player.setAsset(demoAsset, preload: true);
+  /// Load a rendered audition file. Sets [demoLoaded]. Restores [position]
+  /// when hot-swapping the source under playing audio.
+  Future<void> setFile(String path, {Duration? initialPosition}) async {
+    await _player.setFilePath(path);
     demoLoaded = true;
+    if (initialPosition != null) {
+      try {
+        await _player.seek(initialPosition);
+      } catch (_) {
+        // Seek is best-effort during source swaps.
+      }
+    }
   }
+
+  Future<void> play() => _player.play();
+
+  Future<void> pause() => _player.pause();
+
+  Future<void> seek(Duration position) => _player.seek(position);
 
   Future<void> toggle() =>
       _player.playing ? _player.pause() : _player.play();
@@ -52,13 +80,13 @@ final audioPlayerServiceProvider = FutureProvider<AudioPlayerService>((
   ref,
 ) async {
   final service = AudioPlayerService();
-  await service.init();
   try {
-    await service.loadDemo();
+    await service.init();
   } catch (e) {
-    // Asset/decoder missing (e.g. headless CI): transport shows an error
-    // state instead of crashing startup.
-    debugPrint('[AudioPlayerService] demo load failed: $e');
+    // No audio backend (e.g. headless CI, missing libmpv): record it and
+    // let the UI degrade instead of crashing startup.
+    service.audioError = e.toString();
+    debugPrint('[AudioPlayerService] backend unavailable: $e');
   }
   ref.onDispose(service.dispose);
   return service;

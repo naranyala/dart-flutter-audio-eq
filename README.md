@@ -66,6 +66,11 @@ flutter emulators  # or plug in a device
   tested DSP code that renders audio.
 - **Audition player** — bundled 6 s `demo.wav` loop with transport bar and
   audio session-id readout (the id the future Android engine attaches to).
+  The source is a temp `audition.wav` rendered from the *current* EQ state:
+  the enable toggle is a true bypass, and every slider move hot-swaps the
+  source preserving position/playing. File-based (not live-streamed) because
+  the Linux backend only supports URI/file sources — identical behavior on
+  Android and Linux.
 - **Preset interchange** — import/export Equalizer APO `.txt`
   (`Preamp:` + `PK`/`LS`/`HS` filters) via the folder/share buttons.
   Compatible with Equalizer APO, Peace, AutoEQ exports, Resonance.

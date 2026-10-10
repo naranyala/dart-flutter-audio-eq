@@ -199,7 +199,9 @@ class _PlayerBar extends ConsumerWidget {
           ),
         ),
         data: (s) {
-          if (!s.demoLoaded) {
+          // Broken backend → honest notice. Otherwise the play button
+          // prepares the rendered source on first press (controller).
+          if (s.audioError != null) {
             return const TransportRow(
               playing: false,
               busy: false,
@@ -208,9 +210,10 @@ class _PlayerBar extends ConsumerWidget {
               enabled: false,
             );
           }
+          final toggle =
+              ref.read(eqControllerProvider.notifier).toggleAudition;
           return StreamBuilder<PlayerState>(
             stream: s.playerStateStream,
-            initialData: s.player.playerState,
             builder: (context, snap) {
               final playing = snap.data?.playing ?? false;
               final processing =
@@ -220,7 +223,7 @@ class _PlayerBar extends ConsumerWidget {
                 busy: processing == ProcessingState.loading ||
                     processing == ProcessingState.buffering,
                 sessionId: s.androidAudioSessionId,
-                onToggle: s.toggle,
+                onToggle: toggle,
               );
             },
           );

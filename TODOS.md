@@ -25,17 +25,28 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
 - [x] `[E4/G1,G2]` Wired `AudioPlayerService` into the app: Riverpod provider,
       `_PlayerBar` transport + session-id display, generated
       `assets/samples/demo.wav` audition loop (`tool/make_demo_wav.py`),
-      Linux playback via `just_audio_media_kit` + `media_kit_libs_linux`;
-      `TransportRow` split out pure for tests
+      Linux playback via `just_audio_media_kit` + `media_kit_libs_linux`
+      (needs system libmpv — see README); `TransportRow` split out pure
+      for tests
+- [x] `[E4/G1,G2]` Render-based audible audition (the toggle is real now):
+      player source is a temp `audition.wav` rendered from current state
+      (`renderAudition`: bypass serves the untouched demo); every EQ
+      mutation hot-swaps the source preserving position/playing; first
+      play prepares lazily; 3 helper + 3 controller tests. Chosen over
+      live byte-streaming because the Linux backend only supports
+      URI/file sources (`StreamAudioSource` throws there).
+- [x] `[E7]` Toggle persistence: `eq_enabled` in `PresetRepository`,
+      restored in `init`, covered by restart test
 - [ ] `[E2/G3]` Bundle ≥20 AutoEQ-derived headphone presets as app assets with
       attribution; show source in UI
 - [ ] `[E1/G1]` Android engine modeled on Equalizer314: MethodChannel
       `com.audioeq/eq` + `android.media.audiofx.Equalizer` on the
       `just_audio` session id; fallback to mock on failure; verify on a real
       device (emulator DSP is unreliable)
-- [ ] `[E6/G2]` Linux audible path, cheapest working option first: export a
-      PipeWire filter-chain preset (squigwire/eq-cli pattern) **or** local
-      EQ'd render; document exact PipeWire version + commands in README
+- [ ] `[E6/G2]` Linux system-wide path (in-app audition already audible via
+      render flow): export a PipeWire filter-chain preset
+      (squigwire/eq-cli pattern); document exact PipeWire version +
+      commands in README
 - [ ] `[E7/*]` Quality gates green: `flutter analyze` clean, `flutter test`
       green, `flutter build linux --debug` green; record Android device result
 
@@ -61,8 +72,8 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress / blocked (note why).
 - [ ] `[E5/G5]` Live spectrum: Android `Visualizer` API capture (Equalizer314
       pattern); Linux FFT path reusing tested `Spectrum`; both behind the
       same widget
-- [ ] `[E4/G1,G2]` A/B audition flow: bypass toggle + blind-toggle (player +
-      demo loop already wired; add bypass + session-id in bug reports)
+- [ ] `[E4/G1,G2]` A/B audition extras: blind-toggle (enable switch already
+      gives honest bypass); session-id in bug reports (already displayed)
 - [ ] `[E7/*]` Engine conformance tests: same gain/enable/clamp suite runs
       against mock + Android + any future backend
 

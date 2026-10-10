@@ -1,14 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wav/wav.dart';
 
 import 'package:audio_eq/features/eq/data/apo_preset.dart';
 import 'package:audio_eq/features/eq/data/preset_file_service.dart';
 import 'package:audio_eq/features/eq/data/preset_repository.dart';
 import 'package:audio_eq/features/eq/domain/eq_engine.dart';
 import 'package:audio_eq/features/eq/presentation/eq_controller.dart';
+import 'package:audio_eq/features/player/audio_player_service.dart';
 import 'package:audio_eq/main.dart';
 
 class FakeEngine implements EqEngine {
@@ -64,10 +69,45 @@ class FakeFiles extends PresetFileService {
   }
 }
 
+class FakeAudio extends AudioPlayerService {
+  final setFiles = <String>[];
+  var isPlaying = false;
+  var playCalls = 0;
+
+  @override
+  bool get playing => isPlaying;
+
+  @override
+  Future<Duration?> get position async => Duration.zero;
+
+  @override
+  Future<void> setFile(String path, {Duration? initialPosition}) async {
+    setFiles.add(path);
+    demoLoaded = true;
+  }
+
+  @override
+  Future<void> toggle() async {
+    isPlaying = !isPlaying;
+  }
+
+  @override
+  Future<void> play() async {
+    isPlaying = true;
+    playCalls++;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
 Future<ProviderContainer> makeContainer({
   Map<String, Object>? prefs,
   required FakeEngine engine,
   required FakeFiles files,
+  FakeAudio? audio,
+  Future<Directory> Function()? tempDir,
+  Future<ByteData> Function()? demoBytes,
 }) async {
   SharedPreferences.setMockInitialValues(prefs ?? {});
   final repo = PresetRepository(await SharedPreferences.getInstance());
@@ -76,8 +116,9 @@ Future<ProviderContainer> makeContainer({
     overrides: [
       eqEngineProvider.overrideWithValue(engine),
       presetRepositoryProvider.overrideWith((_) => repo),
+      if (audio != null) audioPlayerServiceProvider.overrideWith((_) => audio),
       eqControllerProvider.overrideWith((ref) {
-        controller = EqController(engine, ref, files);
+        controller = EqController(engine, ref, files, tempDir, demoBytes);
         return controller;
       }),
     ],
@@ -90,7 +131,22 @@ Future<ProviderContainer> makeContainer({
   return container;
 }
 
+/// 0.1 s 440 Hz tone as the fake demo asset.
+Future<ByteData> testDemoBytes() async {
+  const rate = 44100;
+  final ch = Float64List(4410);
+  for (var i = 0; i < ch.length; i++) {
+    ch[i] = 0.3 * math.sin(2 * math.pi * 440 * i / rate);
+  }
+  return ByteData.sublistView(Wav([ch], rate).write());
+}
+
 void main() {
+  // Plugin constructors (just_audio, audio_session, shared_preferences
+  // channels) need a binding even in non-widget tests. Channel *calls*
+  // still throw MissingPluginException, which the app code catches.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('setGain clamps to ±12 dB and marks preset Custom', () async {
     final engine = FakeEngine();
     final container = await makeContainer(
@@ -181,5 +237,77 @@ void main() {
     await controller.exportToFile();
     expect(files.exported!['preampDb'], -4.5);
     expect((files.exported!['gainsDb'] as List)[2], 3);
+  });
+
+  test('setEnabled persists across restarts', () async {
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.setEnabled(false);
+
+    final repo = await container.read(presetRepositoryProvider.future);
+    expect(repo.loadEnabled(), isFalse);
+
+    // Fresh controller over the same prefs restores the toggle.
+    final container2 = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      prefs: {
+        'eq_enabled': false,
+        'eq_gains_db': jsonEncode([0.0, 0.0, 0.0, 0.0, 0.0]),
+      },
+    );
+    expect(container2.read(eqControllerProvider).enabled, isFalse);
+  });
+
+  test('first toggle prepares a rendered source; toggle bypasses it', () async {
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.setGain(2, 6);
+
+    // Nothing rendered before first play.
+    expect(audio.setFiles, isEmpty);
+
+    await controller.toggleAudition();
+    expect(audio.setFiles.length, 1);
+    expect(audio.isPlaying, isTrue);
+    final boosted = await File(audio.setFiles.single).readAsBytes();
+
+    await controller.setEnabled(false);
+    expect(audio.setFiles.length, 2);
+    final bypass = await File(audio.setFiles.last).readAsBytes();
+
+    // Bypass file is the untouched demo; boosted render differs.
+    final base = Wav.read((await testDemoBytes()).buffer.asUint8List());
+    expect(bypass, base.write());
+    expect(boosted, isNot(equals(bypass)));
+  });
+
+  test('slider moves while playing hot-swap the source and resume', () async {
+    final audio = FakeAudio();
+    final container = await makeContainer(
+      engine: FakeEngine(),
+      files: FakeFiles(),
+      audio: audio,
+      tempDir: () async => Directory.systemTemp,
+      demoBytes: testDemoBytes,
+    );
+    final controller = container.read(eqControllerProvider.notifier);
+    await controller.toggleAudition();
+    expect(audio.isPlaying, isTrue);
+
+    await controller.setGain(0, 6);
+    expect(audio.setFiles.length, 2);
+    expect(audio.isPlaying, isTrue);
+    expect(audio.playCalls, 1); // resumed after the swap
   });
 }

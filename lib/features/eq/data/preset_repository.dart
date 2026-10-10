@@ -11,6 +11,7 @@ class PresetRepository {
   static const _gainsKey = 'eq_gains_db';
   static const _presetKey = 'eq_preset_name';
   static const _preampKey = 'eq_preamp_db';
+  static const _enabledKey = 'eq_enabled';
 
   static Future<PresetRepository> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,4 +37,10 @@ class PresetRepository {
 
   Future<void> savePreamp(double preampDb) =>
       _prefs.setDouble(_preampKey, preampDb);
+
+  /// Bypass state persists too — otherwise the toggle "forgets" on restart.
+  bool loadEnabled() => _prefs.getBool(_enabledKey) ?? true;
+
+  Future<void> saveEnabled(bool enabled) =>
+      _prefs.setBool(_enabledKey, enabled);
 }
